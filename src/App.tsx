@@ -120,7 +120,7 @@ function PdfReader({ src, onWord, onQuote }: { src: string; onWord: (word: strin
               const hasManualSelection = selection && !selection.isCollapsed && (textDiv.contains(selection.anchorNode) || textDiv.contains(selection.focusNode));
               if (hasManualSelection && selection) {
                 const selectedWord = selection.toString().replace(/\s+/g, " ").trim().replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, "");
-                if (selectedWord) onWordRef.current(selectedWord);
+                if (selectedWord && !selectedWord.includes(" ")) onWordRef.current(selectedWord);
                 return;
               }
               const spacedSingleWord = /^(?:[A-Za-z]\s+)+[A-Za-z]$/.test(text.trim());
