@@ -347,7 +347,13 @@ function PdfReader({ src, onWord, onQuote, screenshotMode, onCapture, onProgress
         if (!scrollContainer) return;
         if (initialProgress > 0) {
           const resumePage = pageElements[Math.min(pageElements.length, Math.max(1, Math.round((initialProgress / 100) * pdf.numPages) || 1)) - 1];
-          if (resumePage) scrollContainer.scrollTop = resumePage.offsetTop;
+          if (resumePage) {
+            // offsetTop is relative to the nearest positioned ancestor, which is
+            // .reader-overlay (position: fixed) here, not the scrollable .pdf-stage -
+            // so it must be computed relative to the scroll container itself instead.
+            const target = resumePage.getBoundingClientRect().top - scrollContainer.getBoundingClientRect().top + scrollContainer.scrollTop;
+            scrollContainer.scrollTop = target;
+          }
         }
         // Track reading progress as how far the user has scrolled through the document,
         // rather than IntersectionObserver thresholds, which can miss updates on fast/short scrolls.
@@ -433,6 +439,8 @@ function App() {
   const [ocrDraft, setOcrDraft] = useState("");
   const [showOcrReview, setShowOcrReview] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
+  const [showCustomQuote, setShowCustomQuote] = useState(false);
+  const [customQuoteDraft, setCustomQuoteDraft] = useState("");
   const [flashcardIndex, setFlashcardIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [search, setSearch] = useState("");
@@ -638,6 +646,12 @@ function App() {
     const cleaned = ocrDraft.replace(/\s+/g, " ").trim();
     if (!cleaned) return;
     setShowOcrReview(false);
+    openShare(selectedBook?.id ?? null, cleaned, "quote");
+  };
+  const useCustomQuote = () => {
+    const cleaned = customQuoteDraft.replace(/\s+/g, " ").trim();
+    if (!cleaned) return;
+    setShowCustomQuote(false);
     openShare(selectedBook?.id ?? null, cleaned, "quote");
   };
   const saveWord = async () => {
@@ -980,6 +994,10 @@ function App() {
                 {screenshotMode && <p className="quote-hint">Seret area di halaman untuk menangkap & mendeteksi teksnya.</p>}
                 {ocrLoading && <p className="quote-hint">Mendeteksi teks dari screenshot...</p>}
                 {ocrError && <p className="quote-error">{ocrError}</p>}
+                <button className="outline" onClick={() => { setCustomQuoteDraft(selectedQuote); setShowCustomQuote(true); }}>
+                  <Pencil size={15} />
+                  Tulis kutipan sendiri
+                </button>
               </div>
             </aside>
           </div>
@@ -1085,6 +1103,21 @@ function App() {
             onChange={(event) => setOcrDraft(event.target.value)}
           />
           <button className="primary modal-submit" disabled={!ocrDraft.trim()} onClick={useOcrQuote}>
+            <Share2 size={16} />
+            Gunakan sebagai kutipan
+          </button>
+        </Modal>
+      )}
+      {showCustomQuote && (
+        <Modal title="Tulis kutipan sendiri" onClose={() => setShowCustomQuote(false)}>
+          <p className="quote-hint">Ketik atau edit bebas teks yang mau dijadikan kutipan.</p>
+          <textarea
+            className="ocr-textarea"
+            value={customQuoteDraft}
+            onChange={(event) => setCustomQuoteDraft(event.target.value)}
+            placeholder="Tulis kutipan di sini..."
+          />
+          <button className="primary modal-submit" disabled={!customQuoteDraft.trim()} onClick={useCustomQuote}>
             <Share2 size={16} />
             Gunakan sebagai kutipan
           </button>
