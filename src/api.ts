@@ -8,7 +8,8 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('bacakuy-token')
   const headers = new Headers(options?.headers)
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch(url, { ...options, headers })
+  const apiUrl = import.meta.env.VITE_API_URL || ''
+  const response = await fetch(`${apiUrl}${url}`, { ...options, headers })
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Permintaan gagal')
   return response.status === 204 ? undefined as T : response.json()
 }
