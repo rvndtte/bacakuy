@@ -2,6 +2,25 @@
 
 ## Serverless deployment
 
+### Supabase setup
+
+Supabase tidak membutuhkan WSL atau CLI untuk setup awal:
+
+1. Buat project di `https://supabase.com`.
+2. Buka **SQL Editor**, lalu jalankan [`supabase/schema.sql`](supabase/schema.sql).
+3. Ambil `Project URL`, `anon key`, dan `service_role key` dari **Project Settings > API**.
+4. Isi `.env` lokal berdasarkan `.env.example`.
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` hanya boleh dipakai backend dan tidak boleh masuk frontend, GitHub, atau `VITE_*`. Schema sudah menyiapkan tabel profiles, folders, books, words, shares, RLS, trigger profile, dan bucket private `books`.
+
+Catatan penting: endpoint backend saat ini masih menggunakan SQLite lokal agar development/test existing tetap berjalan. Setelah schema dibuat dan env tersedia, layer endpoint perlu dialihkan ke Supabase Auth/Database/Storage sebelum deployment serverless production.
+
 Untuk deployment serverless, gunakan Turso/libSQL untuk database dan object storage terpisah untuk PDF. Jangan commit `.env`, token Turso, database SQLite lokal, atau folder `data/uploads`.
 
 1. Install dan login Turso CLI:
