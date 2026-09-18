@@ -805,6 +805,10 @@
   line-height: 1;
   opacity: 0.25;
   user-select: text;
+  --total-scale-factor: 1;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 .textLayer span,
 .textLayer br {
@@ -812,7 +816,12 @@
   color: transparent;
   cursor: pointer;
   white-space: pre;
-  transform-origin: 0 0;
+  transform-origin: 0% 0%;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
 .textLayer span:hover {
   color: #e87f68;
