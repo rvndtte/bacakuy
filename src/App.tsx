@@ -113,8 +113,6 @@ function PdfReader({ src, onWord, onQuote }: { src: string; onWord: (word: strin
             const handleTextClick = (event: Event) => {
               const mouseEvent = event as MouseEvent;
               const textNode = textDiv.firstChild;
-              const text = textDiv.textContent || "";
-              const compactText = text.replace(/\s+/g, "");
               if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
               const selection = window.getSelection();
               const hasManualSelection = selection && !selection.isCollapsed && (textDiv.contains(selection.anchorNode) || textDiv.contains(selection.focusNode));
@@ -123,24 +121,21 @@ function PdfReader({ src, onWord, onQuote }: { src: string; onWord: (word: strin
                 if (selectedWord && !selectedWord.includes(" ")) onWordRef.current(selectedWord);
                 return;
               }
-              const spacedSingleWord = /^(?:[A-Za-z]\s+)+[A-Za-z]$/.test(text.trim());
-              const wordPattern = /[A-Za-z]+(?:[-'][A-Za-z]+)*/g;
-              let match: RegExpExecArray | null;
-              while ((match = wordPattern.exec(text))) {
-                const wordRange = document.createRange();
-                wordRange.setStart(textNode, match.index);
-                wordRange.setEnd(textNode, match.index + match[0].length);
-                const hit = Array.from(wordRange.getClientRects()).some(rect => mouseEvent.clientX >= rect.left && mouseEvent.clientX <= rect.right && mouseEvent.clientY >= rect.top && mouseEvent.clientY <= rect.bottom);
-                if (hit) {
-                  const selectedRange = document.createRange();
-                  selectedRange.setStart(textNode, spacedSingleWord ? 0 : match.index);
-                  selectedRange.setEnd(textNode, spacedSingleWord ? text.length : match.index + match[0].length);
-                  selection?.removeAllRanges();
-                  selection?.addRange(selectedRange);
-                  onWordRef.current(spacedSingleWord ? compactText : match[0]);
-                  break;
-                }
-              }
+              const caret = document.caretRangeFromPoint?.(mouseEvent.clientX, mouseEvent.clientY);
+              if (!caret || caret.startContainer !== textNode) return;
+              const text = textNode.textContent || "";
+              let start = caret.startOffset;
+              let end = caret.startOffset;
+              while (start > 0 && /[A-Za-z'-]/.test(text[start - 1])) start -= 1;
+              while (end < text.length && /[A-Za-z'-]/.test(text[end])) end += 1;
+              const word = text.slice(start, end).replace(/^[-']+|[-']+$/g, "");
+              if (!word) return;
+              const selectedRange = document.createRange();
+              selectedRange.setStart(textNode, start);
+              selectedRange.setEnd(textNode, end);
+              selection?.removeAllRanges();
+              selection?.addRange(selectedRange);
+              onWordRef.current(word);
             };
             textDiv.addEventListener("pointerdown", clearPreviousSelection);
             textDiv.addEventListener("click", handleTextClick);
