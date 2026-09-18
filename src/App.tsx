@@ -100,14 +100,49 @@ function PdfReader({ src, onWord, onQuote }: { src: string; onWord: (word: strin
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           pageElement.append(canvas);
+          const cssScale = viewport.scale * viewport.userUnit;
           const textLayerElement = document.createElement("div");
           textLayerElement.className = "textLayer";
+          textLayerElement.style.setProperty("--total-scale-factor", String(cssScale));
           pageElement.append(textLayerElement);
           readerRef.current.append(pageElement);
-          await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport }).promise;
+          const originalWarn = console.warn;
+          let hasUndecodedImage = false;
+          console.warn = (...args: unknown[]) => {
+            if (typeof args[0] === "string" && /Unable to decode image/i.test(args[0])) hasUndecodedImage = true;
+            originalWarn(...args);
+          };
+          try {
+            await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport }).promise;
+          } finally {
+            console.warn = originalWarn;
+          }
+          if (hasUndecodedImage) {
+            const notice = document.createElement("div");
+            notice.className = "pdf-page-notice";
+            notice.textContent = "Sebagian gambar di halaman ini gagal dimuat (format file tidak didukung).";
+            pageElement.append(notice);
+          }
           const textContent = await page.getTextContent();
           const textLayer = new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerElement, viewport });
           await textLayer.render();
+          // pdf.js sizes spans by measuring text on an offscreen canvas, which drifts from the real
+          // DOM width (font fallback, min-font-size clamp), so word hit-boxes miss the glyphs.
+          const measuredItems: { textDiv: HTMLElement; expectedWidth: number; actualWidth: number }[] = [];
+          let textDivIndex = 0;
+          for (const item of textContent.items) {
+            if (!("str" in item)) continue;
+            const textDiv = textLayer.textDivs[textDivIndex];
+            textDivIndex += 1;
+            if (!textDiv || !item.str || item.width <= 0) continue;
+            if (item.transform[1] !== 0 || item.transform[2] !== 0) continue;
+            measuredItems.push({ textDiv, expectedWidth: item.width * cssScale, actualWidth: textDiv.getBoundingClientRect().width });
+          }
+          measuredItems.forEach(({ textDiv, expectedWidth, actualWidth }) => {
+            if (actualWidth <= 0) return;
+            const currentScaleX = Number(textDiv.style.getPropertyValue("--scale-x")) || 1;
+            textDiv.style.setProperty("--scale-x", String(currentScaleX * expectedWidth / actualWidth));
+          });
           textLayer.textDivs.forEach(textDiv => {
             const clearPreviousSelection = () => window.getSelection()?.removeAllRanges();
             const handleTextClick = (event: Event) => {

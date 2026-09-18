@@ -803,9 +803,16 @@
   inset: 0;
   overflow: hidden;
   line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  transform-origin: 0 0;
   opacity: 0.25;
   user-select: text;
   --total-scale-factor: 1;
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
   --min-font-size: 1;
   --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
   --min-font-size-inv: calc(1 / var(--min-font-size));
@@ -817,11 +824,17 @@
   cursor: pointer;
   white-space: pre;
   transform-origin: 0% 0%;
+}
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
   --font-height: 0;
   font-size: calc(var(--text-scale-factor) * var(--font-height));
   --scale-x: 1;
   --rotate: 0deg;
   transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.textLayer .markedContent {
+  display: contents;
 }
 .textLayer span:hover {
   color: #e87f68;
@@ -833,6 +846,18 @@
   color: #9d5547;
   background: #f7d9d0;
   border-radius: 10px;
+}
+.pdf-page-notice {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #9d5547;
+  background: #f7d9d0dd;
+  border-radius: 8px;
+  pointer-events: none;
 }
 .sample-reader {
   min-width: 690px;
