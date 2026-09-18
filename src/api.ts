@@ -12,6 +12,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const apiUrl = import.meta.env.VITE_API_URL || ''
   const response = await fetch(`${apiUrl}${url}`, { ...options, headers })
+  if (response.status === 401) {
+    localStorage.removeItem('bacakuy-token')
+    window.dispatchEvent(new Event('bacakuy:unauthorized'))
+    throw new Error('Sesi berakhir, silakan login lagi')
+  }
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Permintaan gagal')
   return response.status === 204 ? undefined as T : response.json()
 }

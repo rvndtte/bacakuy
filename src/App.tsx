@@ -211,6 +211,11 @@ function App() {
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => { api.me().then((currentUser) => { setAuthUser(currentUser); setUser(currentUser); }).catch(() => undefined).finally(() => setAuthLoading(false)); }, []);
   useEffect(() => {
+    const handleUnauthorized = () => setAuthUser(null);
+    window.addEventListener("bacakuy:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("bacakuy:unauthorized", handleUnauthorized);
+  }, []);
+  useEffect(() => {
     api
       .bootstrap()
       .then((data) => {
