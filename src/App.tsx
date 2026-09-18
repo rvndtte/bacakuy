@@ -124,9 +124,9 @@ const renderStoryImage = async ({ mode, title, author, quote, coverData, color }
     drawGradientBackground();
   }
   const scrim = ctx.createLinearGradient(0, 0, 0, height);
-  scrim.addColorStop(0, "rgba(5,9,7,0.3)");
-  scrim.addColorStop(0.4, "rgba(5,9,7,0.5)");
-  scrim.addColorStop(1, "rgba(4,7,6,0.94)");
+  scrim.addColorStop(0, "rgba(5,9,7,0.45)");
+  scrim.addColorStop(0.35, "rgba(5,9,7,0.7)");
+  scrim.addColorStop(1, "rgba(4,7,6,0.96)");
   ctx.fillStyle = scrim;
   ctx.fillRect(0, 0, width, height);
 
@@ -1069,21 +1069,22 @@ function App() {
       )}
       {showShare && (
         <Modal title="Bagikan ke story" onClose={() => setShowShare(false)}>
-          {shareMode === "current" ? (
-            <div className={`story-preview current-cover ${!sharedBook?.coverData ? sharedBook?.color || "ink" : ""}`} style={sharedBook?.coverData ? { backgroundImage: `url(${sharedBook.coverData})` } : undefined}>
-              <span className="story-kicker">CURRENT READ</span>
-              <div className="current-cover-text">
-                <h3>{sharedBook?.title || "Buku saat ini"}</h3>
-                <small>{sharedBook?.author || ""}</small>
-              </div>
+          <div className={`story-preview cover-bg ${!sharedBook?.coverData ? sharedBook?.color || "ink" : ""}`} style={sharedBook?.coverData ? { backgroundImage: `url(${sharedBook.coverData})` } : undefined}>
+            <span className="story-kicker">{shareMode === "current" ? "CURRENT READ" : "KUTIPAN"}</span>
+            <div className="cover-bg-text">
+              {shareMode === "current" ? (
+                <>
+                  <h3>{sharedBook?.title || "Buku saat ini"}</h3>
+                  <small>{sharedBook?.author || ""}</small>
+                </>
+              ) : (
+                <>
+                  <h3 className="quote-text">“{shareQuote}”</h3>
+                  <small>{sharedBook?.title || "Kutipan dari buku"}</small>
+                </>
+              )}
             </div>
-          ) : (
-            <div className="story-preview">
-              <div className={`story-cover ${sharedBook?.color || "ink"} ${sharedBook?.coverData ? "has-image" : ""}`} style={sharedBook?.coverData ? { backgroundImage: `url(${sharedBook.coverData})` } : undefined}><span>{sharedBook?.title.replace(/[^A-Za-z0-9 ]/g, "").split(" ").filter(Boolean).map((word) => word[0]).join("").slice(0, 3) || "BK"}</span><BookOpen size={18} /></div>
-              <h3>“{shareQuote}”</h3>
-              <small>{sharedBook?.title || "Kutipan dari buku"}</small>
-            </div>
-          )}
+          </div>
           {shareStatus && <p className="share-status">{shareStatus}</p>}
           <button
             className="primary modal-submit"

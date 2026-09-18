@@ -719,47 +719,36 @@
   position: relative;
   overflow: hidden;
 }
-.story-cover { width: 150px; aspect-ratio: 2 / 2.8; height: auto; align-self: center; border-radius: 8px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; color: #fff; background-position: center; background-size: cover; box-shadow: 0 14px 28px #172a2440; }
-.story-cover span { font: 600 20px var(--serif); line-height: 1.1; }
-.story-cover.has-image > span, .story-cover.has-image > svg { opacity: 0; }
-.story-cover.coral { background-color: #e48770; }
-.story-cover.sage { background-color: #88a68c; }
-.story-cover.ink { background-color: #435652; }
-.story-preview h3 {
-  font: 500 28px/1.16 var(--serif);
-  margin: auto 0 12px;
-}
-.story-preview small {
-  font-size: 10px;
-  opacity: 0.75;
-}
 .story-kicker { color: #f4df92; font-size: 9px; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 12px; }
-.story-preview.current-cover {
+.story-preview.cover-bg {
   background-size: cover;
   background-position: center;
 }
-.story-preview.current-cover.coral { background: linear-gradient(160deg, #f0a48d, #d9614a); }
-.story-preview.current-cover.sage { background: linear-gradient(160deg, #a8c2ac, #6d8f72); }
-.story-preview.current-cover.ink { background: linear-gradient(160deg, #5a6f69, #29352f); }
-.story-preview.current-cover::before {
+.story-preview.cover-bg.coral { background: linear-gradient(160deg, #f0a48d, #d9614a); }
+.story-preview.cover-bg.sage { background: linear-gradient(160deg, #a8c2ac, #6d8f72); }
+.story-preview.cover-bg.ink { background: linear-gradient(160deg, #5a6f69, #29352f); }
+.story-preview.cover-bg::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #05090730 0%, #05090755 40%, #050907f0 100%);
+  background: linear-gradient(180deg, #05090745 0%, #05090770 35%, #050907f5 100%);
 }
-.story-preview.current-cover .story-kicker,
-.story-preview.current-cover .current-cover-text {
+.story-preview.cover-bg .story-kicker,
+.story-preview.cover-bg .cover-bg-text {
   position: relative;
   z-index: 1;
 }
-.story-preview.current-cover .story-kicker {
+.story-preview.cover-bg .story-kicker {
   color: #ffd60a;
 }
-.current-cover-text h3 {
+.cover-bg-text h3 {
   margin: 0 0 4px;
   font: 500 28px/1.16 var(--serif);
 }
-.current-cover-text small {
+.cover-bg-text h3.quote-text {
+  font: italic 500 22px/1.35 var(--serif);
+}
+.cover-bg-text small {
   font-size: 11px;
   opacity: 0.85;
 }
