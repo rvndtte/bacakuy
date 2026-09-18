@@ -212,10 +212,32 @@ app.post('/api/translate', async (req, res) => {
   const word = String(req.body.word || '').trim().toLowerCase()
   if (!word) return res.status(400).json({ error: 'Kata wajib diisi' })
   const fallback = { creative: 'kreatif', attention: 'perhatian', practice: 'latihan', curious: 'penasaran', focus: 'fokus', idea: 'gagasan', research: 'penelitian', open: 'terbuka', access: 'akses', producing: 'menghasilkan' }
+  // MyMemory's top-ranked "match" is sometimes just the source text echoed back
+  // (an untranslated memory entry), so translatedText alone can't be trusted blindly.
+  // Prefer memory entries whose source segment is an exact match for the query
+  // (highest match score first), since those are more reliable than fuzzy partial matches.
+  const isRealTranslation = (candidate) => {
+    const cleaned = String(candidate || '').trim()
+    if (!cleaned) return false
+    if (cleaned.toLowerCase() === word) return false
+    if (!/[a-z]/i.test(cleaned)) return false
+    return true
+  }
+  const stripEdgePunctuation = (text) => String(text || '').trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').trim()
   try {
     const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|id`)
     const data = await response.json()
-    const translation = String(data?.responseData?.translatedText || fallback[word] || '').trim()
+    const idMatches = [...(data?.matches || [])].filter((match) => typeof match?.target === 'string' && match.target.toLowerCase().startsWith('id'))
+    const byScoreDesc = (a, b) => (Number(b?.match) || 0) - (Number(a?.match) || 0)
+    const exactMatches = idMatches
+      .filter((match) => typeof match?.segment === 'string' && match.segment.trim().toLowerCase() === word)
+      .sort(byScoreDesc)
+    const candidates = [
+      ...exactMatches.map((match) => match?.translation),
+      data?.responseData?.translatedText,
+      ...idMatches.slice().sort(byScoreDesc).map((match) => match?.translation),
+    ].map(stripEdgePunctuation)
+    const translation = candidates.find(isRealTranslation) || fallback[word]
     if (!translation) return res.status(502).json({ error: 'Terjemahan tidak ditemukan' })
     res.json({ word, translation })
   } catch {

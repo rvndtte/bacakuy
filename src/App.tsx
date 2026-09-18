@@ -67,20 +67,95 @@ const translations: Record<string, string> = {
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-function PdfReader({ src, onWord, onQuote }: { src: string; onWord: (word: string) => void; onQuote: (quote: string) => void }) {
+function PdfReader({ src, onWord, onQuote, screenshotMode, onCapture, onProgress, initialProgress }: { src: string; onWord: (word: string) => void; onQuote: (quote: string) => void; screenshotMode: boolean; onCapture: (dataUrl: string) => void; onProgress: (percent: number) => void; initialProgress: number }) {
   const readerRef = useRef<HTMLDivElement>(null);
   const onWordRef = useRef(onWord);
   const onQuoteRef = useRef(onQuote);
+  const onCaptureRef = useRef(onCapture);
+  const onProgressRef = useRef(onProgress);
+  const screenshotModeRef = useRef(screenshotMode);
   const [error, setError] = useState("");
 
   useEffect(() => {
     onWordRef.current = onWord;
     onQuoteRef.current = onQuote;
-  }, [onQuote, onWord]);
+    onCaptureRef.current = onCapture;
+    onProgressRef.current = onProgress;
+    screenshotModeRef.current = screenshotMode;
+  }, [onQuote, onWord, onCapture, onProgress, screenshotMode]);
+
+  useEffect(() => {
+    const container = readerRef.current;
+    if (!container) return;
+    let activePage: HTMLElement | null = null;
+    let box: HTMLDivElement | null = null;
+    let startX = 0;
+    let startY = 0;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!screenshotModeRef.current) return;
+      const page = (event.target as HTMLElement).closest(".pdf-page") as HTMLElement | null;
+      if (!page) return;
+      const rect = page.getBoundingClientRect();
+      startX = event.clientX - rect.left;
+      startY = event.clientY - rect.top;
+      activePage = page;
+      box = document.createElement("div");
+      box.className = "capture-box";
+      box.style.left = `${startX}px`;
+      box.style.top = `${startY}px`;
+      box.style.width = "0px";
+      box.style.height = "0px";
+      page.append(box);
+      event.preventDefault();
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!activePage || !box) return;
+      const rect = activePage.getBoundingClientRect();
+      const currentX = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+      const currentY = Math.min(Math.max(event.clientY - rect.top, 0), rect.height);
+      const left = Math.min(startX, currentX);
+      const top = Math.min(startY, currentY);
+      box.style.left = `${left}px`;
+      box.style.top = `${top}px`;
+      box.style.width = `${Math.abs(currentX - startX)}px`;
+      box.style.height = `${Math.abs(currentY - startY)}px`;
+    };
+    const handlePointerUp = () => {
+      if (!activePage || !box) { activePage = null; box = null; return; }
+      const left = parseFloat(box.style.left);
+      const top = parseFloat(box.style.top);
+      const width = parseFloat(box.style.width);
+      const height = parseFloat(box.style.height);
+      const canvas = activePage.querySelector("canvas");
+      box.remove();
+      if (canvas && width > 8 && height > 8) {
+        const cropCanvas = document.createElement("canvas");
+        cropCanvas.width = width;
+        cropCanvas.height = height;
+        const ctx = cropCanvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(canvas, left, top, width, height, 0, 0, width, height);
+          onCaptureRef.current(cropCanvas.toDataURL("image/png"));
+        }
+      }
+      activePage = null;
+      box = null;
+    };
+    container.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      container.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | undefined;
+    let observer: IntersectionObserver | undefined;
+    const pageElements: HTMLElement[] = [];
     const renderPdf = async () => {
       if (!readerRef.current) return;
       readerRef.current.replaceChildren();
@@ -94,8 +169,10 @@ function PdfReader({ src, onWord, onQuote }: { src: string; onWord: (word: strin
           const viewport = page.getViewport({ scale: 1.35 });
           const pageElement = document.createElement("div");
           pageElement.className = "pdf-page";
+          pageElement.dataset.page = String(pageNumber);
           pageElement.style.width = `${viewport.width}px`;
           pageElement.style.height = `${viewport.height}px`;
+          pageElements.push(pageElement);
           const canvas = document.createElement("canvas");
           canvas.width = viewport.width;
           canvas.height = viewport.height;
@@ -176,6 +253,24 @@ function PdfReader({ src, onWord, onQuote }: { src: string; onWord: (word: strin
             textDiv.addEventListener("click", handleTextClick);
           });
         }
+        if (cancelled || !readerRef.current || !pageElements.length) return;
+        const scrollContainer = readerRef.current.parentElement;
+        if (scrollContainer && initialProgress > 0) {
+          const resumePage = pageElements[Math.min(pageElements.length, Math.max(1, Math.round((initialProgress / 100) * pdf.numPages) || 1)) - 1];
+          if (resumePage) scrollContainer.scrollTop = resumePage.offsetTop;
+        }
+        const visibleRatios = new Map<HTMLElement, number>();
+        observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => visibleRatios.set(entry.target as HTMLElement, entry.intersectionRatio));
+          let mostVisiblePage: HTMLElement | null = null;
+          let highestRatio = 0;
+          visibleRatios.forEach((ratio, el) => {
+            if (ratio > highestRatio) { highestRatio = ratio; mostVisiblePage = el; }
+          });
+          const pageNumber = Number((mostVisiblePage as HTMLElement | null)?.dataset.page) || 0;
+          if (pageNumber > 0) onProgressRef.current(Math.round((pageNumber / pdf.numPages) * 100));
+        }, { root: scrollContainer, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
+        pageElements.forEach((pageElement) => observer?.observe(pageElement));
       } catch (renderError) {
         if (!cancelled) setError(renderError instanceof Error ? renderError.message : "PDF gagal dibaca");
       }
@@ -183,15 +278,17 @@ function PdfReader({ src, onWord, onQuote }: { src: string; onWord: (word: strin
     void renderPdf();
     return () => {
       cancelled = true;
+      observer?.disconnect();
       void loadingTask?.destroy();
     };
   }, [src]);
 
   const captureQuote = () => {
+    if (screenshotMode) return;
     const selection = window.getSelection()?.toString().replace(/\s+/g, " ").trim();
     if (selection && selection.split(" ").length >= 2) onQuoteRef.current(selection);
   };
-  return <div className="pdf-reader" ref={readerRef} onMouseUp={captureQuote}>{error && <div className="pdf-error">PDF tidak bisa dirender: {error}</div>}</div>;
+  return <div className={screenshotMode ? "pdf-reader capture-mode" : "pdf-reader"} ref={readerRef} onMouseUp={captureQuote}>{error && <div className="pdf-error">PDF tidak bisa dirender: {error}</div>}</div>;
 }
 
 function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: ApiUser) => void }) {
@@ -234,11 +331,18 @@ function App() {
   const [user, setUser] = useState<ApiUser>({ id: 1, name: "Ravena Aditya", role: "Pembaca aktif", avatar: "RA" });
   const [showWord, setShowWord] = useState(false);
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
+  const [translateDraft, setTranslateDraft] = useState("");
+  const [screenshotMode, setScreenshotMode] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrError, setOcrError] = useState("");
+  const [ocrDraft, setOcrDraft] = useState("");
+  const [showOcrReview, setShowOcrReview] = useState(false);
   const [flashcardIndex, setFlashcardIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [search, setSearch] = useState("");
   const [ocr, setOcr] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
+  const progressSaveTimeout = useRef<number | null>(null);
   useEffect(() => { api.me().then((currentUser) => { setAuthUser(currentUser); setUser(currentUser); }).catch(() => undefined).finally(() => setAuthLoading(false)); }, []);
   useEffect(() => {
     const handleUnauthorized = () => setAuthUser(null);
@@ -260,10 +364,7 @@ function App() {
       });
   }, []);
   useEffect(() => { if (authUser) api.getUser().then(setUser).catch(() => undefined); }, [authUser]);
-  useEffect(() => {
-    if (showWord && !selectedWord) setShowWord(false);
-  }, [showWord, selectedWord]);
-  useEffect(() => { setSelectedQuote(""); setQuoteError(""); }, [selectedBook?.id]);
+  useEffect(() => { setSelectedQuote(""); setQuoteError(""); setScreenshotMode(false); setOcrError(""); }, [selectedBook?.id]);
   useEffect(() => {
     const reader = document.querySelector(".sample-reader");
     if (!reader || selectedBook?.fileUrl) return;
@@ -358,15 +459,16 @@ function App() {
       setApiError(error instanceof Error ? error.message : "Buku gagal dihapus");
     }
   };
-  const openWord = async (word: string) => {
-    const selectedText = word.length < 80 ? word : window.getSelection()?.toString().trim() || word;
-    const clean = selectedText.toLowerCase().replace(/[^a-z]/g, "");
-    if (!clean || clean.length < 3) return;
+  const translateText = async (rawText: string) => {
+    const selectedText = rawText.length < 80 ? rawText : window.getSelection()?.toString().trim() || rawText;
+    const clean = selectedText.toLowerCase().trim().replace(/[^a-z' -]/g, "").replace(/\s+/g, " ").trim();
+    if (!clean || clean.length < 2) return;
+    setTranslateDraft(clean);
     setSelectedWord({
       id: 0,
       word: clean,
       translation: "Menerjemahkan...",
-      context: "Klik kata di halaman untuk menyimpannya ke bank kata.",
+      context: "Klik kata di halaman, atau ketik sendiri kata/frasa untuk diterjemahkan.",
       savedAt: "Baru saja",
     });
     setShowWord(true);
@@ -376,6 +478,39 @@ function App() {
     } catch {
       setSelectedWord((current) => current?.word === clean ? { ...current, translation: translations[clean] || "Terjemahan tidak tersedia" } : current);
     }
+  };
+  const openWord = (word: string) => { void translateText(word); };
+  const handleProgress = (percent: number) => {
+    setSelectedBook((current) => current && current.progress !== percent ? { ...current, progress: percent } : current);
+    setBooks((current) => current.map((book) => book.id === selectedBook?.id && book.progress !== percent ? { ...book, progress: percent } : book));
+    if (!selectedBook || selectedBook.progress === percent) return;
+    const bookToSave = { ...selectedBook, progress: percent };
+    if (progressSaveTimeout.current) window.clearTimeout(progressSaveTimeout.current);
+    progressSaveTimeout.current = window.setTimeout(() => { api.updateBook(bookToSave).catch(() => undefined); }, 1500);
+  };
+  const toggleScreenshotMode = () => { setScreenshotMode((current) => !current); setOcrError(""); };
+  const handleCapture = async (dataUrl: string) => {
+    setScreenshotMode(false);
+    setOcrLoading(true);
+    setOcrError("");
+    try {
+      const Tesseract = await import("tesseract.js");
+      const { data } = await Tesseract.recognize(dataUrl, "eng");
+      const text = data.text.replace(/[ \t]+/g, " ").replace(/\n{2,}/g, "\n").trim();
+      if (!text) { setOcrError("Tidak ada teks yang terdeteksi, coba pilih area lain."); return; }
+      setOcrDraft(text);
+      setShowOcrReview(true);
+    } catch {
+      setOcrError("Deteksi teks gagal. Coba lagi.");
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+  const useOcrQuote = () => {
+    const cleaned = ocrDraft.replace(/\s+/g, " ").trim();
+    if (!cleaned) return;
+    setShowOcrReview(false);
+    openShare(selectedBook?.id ?? null, cleaned, "quote");
   };
   const saveWord = async () => {
     if (selectedWord) {
@@ -650,7 +785,7 @@ function App() {
             </aside>
             <div className="pdf-stage">
               {selectedBook.fileUrl ? (
-                <PdfReader src={selectedBook.fileUrl} onWord={openWord} onQuote={handleQuoteSelection} />
+                <PdfReader src={selectedBook.fileUrl} onWord={openWord} onQuote={handleQuoteSelection} screenshotMode={screenshotMode} onCapture={handleCapture} onProgress={handleProgress} initialProgress={selectedBook.progress} />
               ) : (
                 <div
                   className="sample-reader"
@@ -689,12 +824,26 @@ function App() {
               <span className="eyebrow">CATATAN BACA</span>
               <h3>“Stay curious.”</h3>
               <p>Tambahkan highlight dan kata baru saat kamu membaca.</p>
-              <button className="outline" onClick={() => setShowWord(true)}>
+              <button className="outline" onClick={() => { setTranslateDraft(selectedWord?.word || ""); setShowWord(true); }}>
                 <Languages size={15} />
                 Terjemahkan kata
               </button>
-              {selectedQuote && <button className="quote-share reader-quote-share" onClick={() => openShare(selectedBook.id, selectedQuote, "quote")}><Share2 size={15} />Bagikan kutipan terpilih</button>}
-              {quoteError && <p className="quote-error">{quoteError}</p>}
+              <div className="quote-options">
+                <span className="eyebrow">BAGIKAN KUTIPAN</span>
+                {selectedQuote ? (
+                  <button className="quote-share reader-quote-share" onClick={() => openShare(selectedBook.id, selectedQuote, "quote")}><Share2 size={15} />Bagikan kutipan terpilih</button>
+                ) : (
+                  <p className="quote-hint">Seret (drag) teks di halaman PDF untuk memilih kutipan dari teks asli.</p>
+                )}
+                {quoteError && <p className="quote-error">{quoteError}</p>}
+                <button className={screenshotMode ? "outline tool-active" : "outline"} onClick={toggleScreenshotMode}>
+                  <Sparkles size={15} />
+                  {screenshotMode ? "Batal ambil screenshot" : "Kutipan dari screenshot"}
+                </button>
+                {screenshotMode && <p className="quote-hint">Seret area di halaman untuk menangkap & mendeteksi teksnya.</p>}
+                {ocrLoading && <p className="quote-hint">Mendeteksi teks dari screenshot...</p>}
+                {ocrError && <p className="quote-error">{ocrError}</p>}
+              </div>
             </aside>
           </div>
         </div>
@@ -738,25 +887,49 @@ function App() {
         <Modal title="Terjemahkan kata" onClose={() => setShowWord(false)}>
           <div className="translate-box">
             <span className="eyebrow">INGGRIS</span>
-            <h2>{selectedWord?.word || "Pilih kata dari halaman"}</h2>
+            <input
+              className="translate-input"
+              value={translateDraft}
+              onChange={(event) => setTranslateDraft(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void translateText(translateDraft); } }}
+              placeholder="Ketik kata atau frasa untuk diterjemahkan"
+              autoFocus
+            />
             <div className="translate-line">
               <ArrowLeft size={15} />
               <span>INDONESIA</span>
               <strong>{selectedWord?.translation || "Belum ada kata dipilih"}</strong>
             </div>
           </div>
-          <button className="primary modal-submit" disabled={!selectedWord || selectedWord.translation === "Menerjemahkan..."} onClick={saveWord}>
-            <Plus size={16} />
-            Simpan ke bank kata
-          </button>
+          <div className="translate-actions">
+            <button className="outline" disabled={!translateDraft.trim()} onClick={() => void translateText(translateDraft)}>
+              <Languages size={15} />
+              Terjemahkan
+            </button>
+            <button className="primary modal-submit" disabled={!selectedWord || selectedWord.word !== translateDraft.toLowerCase().trim().replace(/[^a-z' -]/g, "").replace(/\s+/g, " ").trim() || selectedWord.translation === "Menerjemahkan..."} onClick={saveWord}>
+              <Plus size={16} />
+              Simpan ke bank kata
+            </button>
+          </div>
         </Modal>
       )}
       {showShare && (
         <Modal title="Bagikan ke story" onClose={() => setShowShare(false)}>
-          <div className="story-preview">
-            <div className={`story-cover ${sharedBook?.color || "ink"} ${sharedBook?.coverData ? "has-image" : ""}`} style={sharedBook?.coverData ? { backgroundImage: `url(${sharedBook.coverData})` } : undefined}><span>{sharedBook?.title.replace(/[^A-Za-z0-9 ]/g, "").split(" ").filter(Boolean).map((word) => word[0]).join("").slice(0, 3) || "BK"}</span><BookOpen size={18} /></div>
-            {shareMode === "current" ? <><h3>{sharedBook?.title || "Buku saat ini"}</h3><small>CURRENT READ</small></> : <><h3>“{shareQuote}”</h3><small>{sharedBook?.title || "Kutipan dari buku"}</small></>}
-          </div>
+          {shareMode === "current" ? (
+            <div className={`story-preview current-cover ${!sharedBook?.coverData ? sharedBook?.color || "ink" : ""}`} style={sharedBook?.coverData ? { backgroundImage: `url(${sharedBook.coverData})` } : undefined}>
+              <span className="story-kicker">CURRENT READ</span>
+              <div className="current-cover-text">
+                <h3>{sharedBook?.title || "Buku saat ini"}</h3>
+                <small>{sharedBook?.author || ""}</small>
+              </div>
+            </div>
+          ) : (
+            <div className="story-preview">
+              <div className={`story-cover ${sharedBook?.color || "ink"} ${sharedBook?.coverData ? "has-image" : ""}`} style={sharedBook?.coverData ? { backgroundImage: `url(${sharedBook.coverData})` } : undefined}><span>{sharedBook?.title.replace(/[^A-Za-z0-9 ]/g, "").split(" ").filter(Boolean).map((word) => word[0]).join("").slice(0, 3) || "BK"}</span><BookOpen size={18} /></div>
+              <h3>“{shareQuote}”</h3>
+              <small>{sharedBook?.title || "Kutipan dari buku"}</small>
+            </div>
+          )}
           {shareStatus && <p className="share-status">{shareStatus}</p>}
           <button
             className="primary modal-submit"
@@ -764,6 +937,21 @@ function App() {
           >
             <Share2 size={16} />
             Bagikan story
+          </button>
+        </Modal>
+      )}
+      {showOcrReview && (
+        <Modal title="Kutipan dari screenshot" onClose={() => setShowOcrReview(false)}>
+          <p className="quote-hint">Periksa dan edit teks hasil deteksi sebelum dijadikan kutipan.</p>
+          <textarea
+            className="ocr-textarea"
+            value={ocrDraft}
+            onChange={(event) => setOcrDraft(event.target.value)}
+            autoFocus
+          />
+          <button className="primary modal-submit" disabled={!ocrDraft.trim()} onClick={useOcrQuote}>
+            <Share2 size={16} />
+            Gunakan sebagai kutipan
           </button>
         </Modal>
       )}

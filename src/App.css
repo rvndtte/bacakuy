@@ -666,6 +666,33 @@
   font: 500 31px var(--serif);
   margin: 7px 0 18px;
 }
+.translate-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px 10px;
+  font: 500 22px var(--serif);
+  color: var(--ink);
+  background: #fff;
+  outline: 0;
+  margin: 7px 0 18px;
+}
+.translate-input:focus {
+  border-color: var(--coral);
+}
+.translate-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+.translate-actions .outline {
+  margin-top: 0;
+  flex: 0 0 auto;
+}
+.translate-actions .modal-submit {
+  margin-top: 0;
+  flex: 1;
+}
 .translate-line {
   border-top: 1px solid #dfe6dc;
   padding-top: 13px;
@@ -707,8 +734,80 @@
   opacity: 0.75;
 }
 .story-kicker { color: #f4df92; font-size: 9px; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 12px; }
+.story-preview.current-cover {
+  background-size: cover;
+  background-position: center;
+}
+.story-preview.current-cover.coral { background: linear-gradient(160deg, #f0a48d, #d9614a); }
+.story-preview.current-cover.sage { background: linear-gradient(160deg, #a8c2ac, #6d8f72); }
+.story-preview.current-cover.ink { background: linear-gradient(160deg, #5a6f69, #29352f); }
+.story-preview.current-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #14201b00 40%, #0e1713e6 100%);
+}
+.story-preview.current-cover .story-kicker,
+.story-preview.current-cover .current-cover-text {
+  position: relative;
+  z-index: 1;
+}
+.current-cover-text h3 {
+  margin: 0 0 4px;
+  font: 500 28px/1.16 var(--serif);
+}
+.current-cover-text small {
+  font-size: 11px;
+  opacity: 0.85;
+}
 .quote-error { color: #b45b4a; background: #f7d9d0; border-radius: 7px; padding: 9px 10px; font-size: 10px; line-height: 1.4; margin-top: 12px; }
 .share-status { margin: 12px 0 0; color: #55735d; font-size: 11px; text-align: center; }
+.quote-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 26px;
+}
+.quote-options .outline {
+  margin-top: 0;
+  justify-content: flex-start;
+  width: 100%;
+}
+.quote-options .outline.tool-active {
+  background: #e9efe5;
+  color: var(--ink);
+}
+.quote-hint {
+  font-size: 10px;
+  line-height: 1.5;
+  color: #8e9991;
+  background: #f5f7f2;
+  border-radius: 7px;
+  padding: 9px 10px;
+  margin-top: 8px;
+}
+.ocr-textarea {
+  width: 100%;
+  min-height: 140px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 13px;
+  font: 400 13px/1.6 "DM Sans", sans-serif;
+  color: var(--ink);
+  background: #f5f7f2;
+  outline: 0;
+  resize: vertical;
+}
+.ocr-textarea:focus {
+  border-color: var(--coral);
+}
+.ocr-preview {
+  width: 100%;
+  border-radius: 9px;
+  margin-bottom: 13px;
+  display: block;
+  border: 1px solid var(--line);
+}
 .reader-overlay {
   position: fixed;
   inset: 0;
@@ -824,6 +923,20 @@
   cursor: pointer;
   white-space: pre;
   transform-origin: 0% 0%;
+  padding: 5px 3px;
+  margin: -5px -3px;
+}
+.pdf-reader.capture-mode .textLayer {
+  pointer-events: none;
+}
+.pdf-reader.capture-mode .pdf-page {
+  cursor: crosshair;
+}
+.capture-box {
+  position: absolute;
+  border: 1.5px dashed var(--coral, #e87f68);
+  background: #e87f6822;
+  pointer-events: none;
 }
 .textLayer > :not(.markedContent),
 .textLayer .markedContent span:not(.markedContent) {
