@@ -34,3 +34,6 @@ data/uploads/
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
+.env*

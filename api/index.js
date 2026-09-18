@@ -1,7 +1,7 @@
-const express = require('express')
-const cors = require('cors')
-const crypto = require('crypto')
-const { admin: supabaseAdmin, authClient: supabaseAuth, enabled: supabaseEnabled, createUserClient } = require('../server/supabase.cjs')
+import express from 'express'
+import cors from 'cors'
+import { randomUUID } from 'node:crypto'
+import { admin as supabaseAdmin, authClient as supabaseAuth, enabled as supabaseEnabled, createUserClient } from '../server/supabase.cjs'
 
 if (!supabaseEnabled) {
   throw new Error('Supabase belum dikonfigurasi: set SUPABASE_URL, SUPABASE_ANON_KEY, dan SUPABASE_SERVICE_ROLE_KEY')
@@ -136,7 +136,7 @@ app.delete('/api/folders/:name', requireAuth, async (req, res) => {
 })
 
 app.post('/api/books/upload-url', requireAuth, async (req, res) => {
-  const path = `${req.user.id}/${crypto.randomUUID()}.pdf`
+  const path = `${req.user.id}/${randomUUID()}.pdf`
   const { data, error } = await supabaseAdmin.storage.from('books').createSignedUploadUrl(path)
   if (error) return res.status(500).json({ error: error.message })
   res.json({ path: data.path, token: data.token, signedUrl: data.signedUrl })
@@ -233,4 +233,4 @@ app.post('/api/shares', requireAuth, async (req, res) => {
 })
 app.get('/api/health', (_req, res) => res.json({ ok: true, database: 'supabase' }))
 
-module.exports = app
+export default app
