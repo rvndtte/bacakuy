@@ -17,4 +17,10 @@ const authClient = enabled
     })
   : null
 
-module.exports = { admin, authClient, enabled }
+const createUserClient = token =>
+  createClient(url, anonKey || serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  })
+
+module.exports = { admin, authClient, enabled, createUserClient }

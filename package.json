@@ -5,21 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node server/index.cjs",
+    "server": "node --env-file=.env server/dev.cjs",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
-    "test": "node --test test/*.integration.cjs",
+    "test": "node --env-file=.env --test test/*.integration.cjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@libsql/client": "^0.18.0",
     "@supabase/supabase-js": "^2.116.0",
-    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "lucide-react": "^1.47.0",
-    "multer": "^2.4.0",
     "pdfjs-dist": "^6.3.289",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
@@ -27,7 +24,6 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/multer": "^2.2.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
