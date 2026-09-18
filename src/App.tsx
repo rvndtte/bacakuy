@@ -67,6 +67,95 @@ const translations: Record<string, string> = {
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
+const storyGradients: Record<string, [string, string]> = {
+  coral: ["#f0a48d", "#d9614a"],
+  sage: ["#a8c2ac", "#6d8f72"],
+  ink: ["#5a6f69", "#29352f"],
+};
+const loadImageAsync = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = reject;
+  img.src = src;
+});
+const wrapCanvasText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+};
+const renderStoryImage = async ({ mode, title, author, quote, coverData, color }: { mode: "current" | "quote"; title: string; author: string; quote: string; coverData?: string; color?: string }): Promise<Blob | null> => {
+  const width = 1080;
+  const height = 1920;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const drawGradientBackground = () => {
+    const [from, to] = storyGradients[color || "ink"] || storyGradients.ink;
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, from);
+    gradient.addColorStop(1, to);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+  };
+  if (coverData) {
+    try {
+      const img = await loadImageAsync(coverData);
+      const scale = Math.max(width / img.width, height / img.height);
+      const drawW = img.width * scale;
+      const drawH = img.height * scale;
+      ctx.drawImage(img, (width - drawW) / 2, (height - drawH) / 2, drawW, drawH);
+    } catch {
+      drawGradientBackground();
+    }
+  } else {
+    drawGradientBackground();
+  }
+  const scrim = ctx.createLinearGradient(0, 0, 0, height);
+  scrim.addColorStop(0, "rgba(5,9,7,0.3)");
+  scrim.addColorStop(0.4, "rgba(5,9,7,0.5)");
+  scrim.addColorStop(1, "rgba(4,7,6,0.94)");
+  ctx.fillStyle = scrim;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#ffd60a";
+  ctx.font = "700 32px Arial, sans-serif";
+  ctx.fillText(mode === "current" ? "C U R R E N T   R E A D" : "K U T I P A N", 64, 130);
+
+  const authorY = height - 90;
+  ctx.fillStyle = "#ffffff";
+  if (mode === "current") {
+    ctx.font = "500 60px Georgia, serif";
+    const lines = wrapCanvasText(ctx, title || "Buku saat ini", width - 128).slice(0, 5);
+    const lineHeight = 70;
+    const startY = authorY - 56 - (lines.length - 1) * lineHeight;
+    lines.forEach((line, index) => ctx.fillText(line, 64, startY + index * lineHeight));
+  } else {
+    ctx.font = "italic 500 46px Georgia, serif";
+    const lines = wrapCanvasText(ctx, `“${quote}”`, width - 128).slice(0, 8);
+    const lineHeight = 58;
+    const startY = authorY - 56 - (lines.length - 1) * lineHeight;
+    lines.forEach((line, index) => ctx.fillText(line, 64, startY + index * lineHeight));
+  }
+  ctx.font = "400 30px Arial, sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.fillText(author, 64, authorY);
+
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+};
+
 function PdfReader({ src, onWord, onQuote, screenshotMode, onCapture, onProgress, initialProgress }: { src: string; onWord: (word: string) => void; onQuote: (quote: string) => void; screenshotMode: boolean; onCapture: (dataUrl: string) => void; onProgress: (percent: number) => void; initialProgress: number }) {
   const readerRef = useRef<HTMLDivElement>(null);
   const onWordRef = useRef(onWord);
@@ -154,7 +243,7 @@ function PdfReader({ src, onWord, onQuote, screenshotMode, onCapture, onProgress
   useEffect(() => {
     let cancelled = false;
     let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | undefined;
-    let observer: IntersectionObserver | undefined;
+    let detachScroll: (() => void) | undefined;
     const pageElements: HTMLElement[] = [];
     const renderPdf = async () => {
       if (!readerRef.current) return;
@@ -255,22 +344,28 @@ function PdfReader({ src, onWord, onQuote, screenshotMode, onCapture, onProgress
         }
         if (cancelled || !readerRef.current || !pageElements.length) return;
         const scrollContainer = readerRef.current.parentElement;
-        if (scrollContainer && initialProgress > 0) {
+        if (!scrollContainer) return;
+        if (initialProgress > 0) {
           const resumePage = pageElements[Math.min(pageElements.length, Math.max(1, Math.round((initialProgress / 100) * pdf.numPages) || 1)) - 1];
           if (resumePage) scrollContainer.scrollTop = resumePage.offsetTop;
         }
-        const visibleRatios = new Map<HTMLElement, number>();
-        observer = new IntersectionObserver((entries) => {
-          entries.forEach((entry) => visibleRatios.set(entry.target as HTMLElement, entry.intersectionRatio));
-          let mostVisiblePage: HTMLElement | null = null;
-          let highestRatio = 0;
-          visibleRatios.forEach((ratio, el) => {
-            if (ratio > highestRatio) { highestRatio = ratio; mostVisiblePage = el; }
-          });
-          const pageNumber = Number((mostVisiblePage as HTMLElement | null)?.dataset.page) || 0;
-          if (pageNumber > 0) onProgressRef.current(Math.round((pageNumber / pdf.numPages) * 100));
-        }, { root: scrollContainer, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
-        pageElements.forEach((pageElement) => observer?.observe(pageElement));
+        // Track reading progress as how far the user has scrolled through the document,
+        // rather than IntersectionObserver thresholds, which can miss updates on fast/short scrolls.
+        let ticking = false;
+        const reportProgress = () => {
+          ticking = false;
+          const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+          const percent = maxScroll > 4 ? Math.round((scrollContainer.scrollTop / maxScroll) * 100) : 100;
+          onProgressRef.current(Math.min(100, Math.max(0, percent)));
+        };
+        const handleScroll = () => {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(reportProgress);
+        };
+        scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+        reportProgress();
+        detachScroll = () => scrollContainer.removeEventListener("scroll", handleScroll);
       } catch (renderError) {
         if (!cancelled) setError(renderError instanceof Error ? renderError.message : "PDF gagal dibaca");
       }
@@ -278,7 +373,7 @@ function PdfReader({ src, onWord, onQuote, screenshotMode, onCapture, onProgress
     void renderPdf();
     return () => {
       cancelled = true;
-      observer?.disconnect();
+      detachScroll?.();
       void loadingTask?.destroy();
     };
   }, [src]);
@@ -337,6 +432,7 @@ function App() {
   const [ocrError, setOcrError] = useState("");
   const [ocrDraft, setOcrDraft] = useState("");
   const [showOcrReview, setShowOcrReview] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const [flashcardIndex, setFlashcardIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [search, setSearch] = useState("");
@@ -435,8 +531,40 @@ function App() {
     setQuoteError(""); setSelectedQuote(quote);
   };
   const saveUser = async (nextUser: ApiUser) => { try { const saved = await api.updateUser(nextUser); setUser(saved); setShowUserEdit(false); } catch (error) { setApiError(error instanceof Error ? error.message : "Profil gagal diperbarui"); } };
-  const publishShare = async () => { try { await api.createShare(shareBookId, shareQuote); if (navigator.share) { await navigator.share({ title: "BacaKuy", text: shareQuote }); } setShareStatus("Berhasil disimpan dan dibagikan ke story."); } catch (error) { setShareStatus(error instanceof Error ? error.message : "Story gagal dibagikan"); } };
   const sharedBook = books.find((book) => book.id === shareBookId);
+  const publishShare = async () => {
+    try {
+      await api.createShare(shareBookId, shareQuote);
+      const blob = await renderStoryImage({
+        mode: shareMode,
+        title: sharedBook?.title || "Buku saat ini",
+        author: shareMode === "current" ? sharedBook?.author || "" : sharedBook?.title || "Kutipan dari buku",
+        quote: shareQuote,
+        coverData: sharedBook?.coverData,
+        color: sharedBook?.color,
+      }).catch(() => null);
+      const file = blob ? new File([blob], "bacakuy-story.png", { type: "image/png" }) : null;
+      if (file && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: "BacaKuy", text: shareQuote, files: [file] });
+        setShareStatus("Foto story siap dibagikan ke Instagram atau aplikasi lain.");
+      } else if (file) {
+        const url = URL.createObjectURL(file);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "bacakuy-story.png";
+        link.click();
+        URL.revokeObjectURL(url);
+        setShareStatus("Foto story tersimpan ke perangkat. Unggah manual ke Instagram Story.");
+      } else if (navigator.share) {
+        await navigator.share({ title: "BacaKuy", text: shareQuote });
+        setShareStatus("Berhasil disimpan dan dibagikan ke story.");
+      } else {
+        setShareStatus("Kutipan tersimpan ke riwayat share.");
+      }
+    } catch (error) {
+      setShareStatus(error instanceof Error ? error.message : "Story gagal dibagikan");
+    }
+  };
   if (authLoading) return <div className="auth-loading"><span className="brand-mark">bk</span><p>Menyiapkan ruang baca...</p></div>;
   if (!authUser) return <LoginScreen onAuthenticated={(currentUser) => { setAuthUser(currentUser); setUser(currentUser); }} />;
   const updateBook = async (book: Book) => {
@@ -782,6 +910,10 @@ function App() {
                 <Languages size={18} />
                 Kata
               </button>
+              <button className="notes-toggle" onClick={() => setShowNotes(true)}>
+                <Share2 size={18} />
+                Catatan
+              </button>
             </aside>
             <div className="pdf-stage">
               {selectedBook.fileUrl ? (
@@ -820,7 +952,12 @@ function App() {
                 </div>
               )}
             </div>
-            <aside className="reader-notes">
+            <div className={showNotes ? "reader-notes-backdrop open" : "reader-notes-backdrop"} onClick={() => setShowNotes(false)} />
+            <aside className={showNotes ? "reader-notes open" : "reader-notes"}>
+              <button className="notes-close" onClick={() => setShowNotes(false)}>
+                <ArrowLeft size={14} />
+                Tutup
+              </button>
               <span className="eyebrow">CATATAN BACA</span>
               <h3>“Stay curious.”</h3>
               <p>Tambahkan highlight dan kata baru saat kamu membaca.</p>
@@ -893,7 +1030,6 @@ function App() {
               onChange={(event) => setTranslateDraft(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void translateText(translateDraft); } }}
               placeholder="Ketik kata atau frasa untuk diterjemahkan"
-              autoFocus
             />
             <div className="translate-line">
               <ArrowLeft size={15} />
@@ -947,7 +1083,6 @@ function App() {
             className="ocr-textarea"
             value={ocrDraft}
             onChange={(event) => setOcrDraft(event.target.value)}
-            autoFocus
           />
           <button className="primary modal-submit" disabled={!ocrDraft.trim()} onClick={useOcrQuote}>
             <Share2 size={16} />

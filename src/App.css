@@ -745,12 +745,15 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #14201b00 40%, #0e1713e6 100%);
+  background: linear-gradient(180deg, #05090730 0%, #05090755 40%, #050907f0 100%);
 }
 .story-preview.current-cover .story-kicker,
 .story-preview.current-cover .current-cover-text {
   position: relative;
   z-index: 1;
+}
+.story-preview.current-cover .story-kicker {
+  color: #ffd60a;
 }
 .current-cover-text h3 {
   margin: 0 0 4px;
@@ -868,6 +871,15 @@
   gap: 6px;
   padding: 9px 2px;
   border-radius: 7px;
+}
+.notes-toggle {
+  display: none;
+}
+.reader-notes-backdrop {
+  display: none;
+}
+.notes-close {
+  display: none;
 }
 .reader-tools .tool-active {
   background: #e4eee3;
@@ -1190,7 +1202,38 @@
     grid-template-columns: 1fr;
   }
   .reader-notes {
-    display: none;
+    position: fixed;
+    top: 72px;
+    right: 0;
+    bottom: 0;
+    width: min(320px, 88vw);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    z-index: 15;
+    box-shadow: -8px 0 24px #26332f30;
+    overflow-y: auto;
+  }
+  .reader-notes.open {
+    transform: translateX(0);
+  }
+  .reader-notes-backdrop.open {
+    display: block;
+    position: fixed;
+    top: 72px;
+    inset: 72px 0 0 0;
+    background: #26332f40;
+    z-index: 14;
+  }
+  .notes-toggle {
+    display: grid;
+  }
+  .notes-close {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 18px;
+    color: #8e9a91;
+    font-size: 11px;
   }
   .reader-body {
     grid-template-columns: 65px 1fr;
